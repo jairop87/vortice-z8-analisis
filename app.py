@@ -1,22 +1,23 @@
 import streamlit as st
 import duckdb
-import plotly.express as px
 import pandas as pd
+import plotly.express as px
 import requests
+import io
 
-# --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="VORTICE-8 | Inteligencia Z8", layout="wide", page_icon="👮")
+# --- CONFIGURACIÓN DE INTERFAZ ---
+st.set_page_config(page_title="VORTICE-8 | Inteligencia Z8", layout="wide", page_icon="🚔")
 
-# Estilo visual táctico
 st.markdown("""
     <style>
-    .main { background-color: #0b0e14; color: #ffffff; }
-    .stMetric { background-color: #161b22; border: 1px solid #30363d; padding: 10px; border-radius: 5px; }
+    .main { background-color: #0b0e14; color: #e0e0e0; }
+    div[data-testid="stMetricValue"] { color: #00ffcc; font-family: 'Courier New', monospace; }
+    .stHeader { border-bottom: 2px solid #00ffcc; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- DICCIONARIO DE DATOS REMOTOS ---
-# Nota: Asegúrate de que cada link sea el correcto para cada archivo.
+# --- MAPEO DE DATOS (DICCIONARIO DE SHAREPOINT) ---
+# Se eliminó el código redundante e=... y se dejó solo el parámetro de descarga limpia
 DATA_LINKS = {
     "armas": "https://analisispolicial.sharepoint.com/:u:/g/IQByBqSIWwvlRb0C7-7yXgjbAfJvhZumoAkpRbv_tNc2t0s?download=1",
     "objetos": "https://analisispolicial.sharepoint.com/:u:/g/IQByBqSIWwvlRb0C7-7yXgjbAfJvhZumoAkpRbv_tNc2t0s?download=1",
@@ -26,96 +27,117 @@ DATA_LINKS = {
     "vehiculos": "https://analisispolicial.sharepoint.com/:u:/g/IQBRcL1hAqruSrohG7Ch8mkzAbPC4AtM9lzaqD5-QpOnU-8?download=1"
 }
 
-# --- MOTOR DUCKDB CON HTTPFS ---
+# --- MOTOR DE DATOS (ANTIGRAVITY BUFFER) ---
 @st.cache_resource
-def init_engine():
+def load_data_lake():
     con = duckdb.connect(database=':memory:')
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    
+    progress_bar = st.progress(0)
+    step = 1 / len(DATA_LINKS)
+    current_progress = 0
+
     try:
-        con.execute("INSTALL httpfs; LOAD httpfs;")
-        # Creamos las vistas remotas
-        for table, url in DATA_LINKS.items():
-            con.execute(f"CREATE OR REPLACE VIEW t_{table} AS SELECT * FROM read_parquet('{url}')")
+        for name, url in DATA_LINKS.items():
+            # El "puente" para evitar el error HTTP 0 de SharePoint
+            resp = requests.get(url, headers=headers, timeout=60)
+            if resp.status_code == 200:
+                buffer = io.BytesIO(resp.content)
+                df = pd.read_parquet(buffer)
+                con.register(f"t_{name}", df)
+            else:
+                return con, f"Error en {name}: SharePoint rechazó la conexión (Status {resp.status_code})"
+            
+            current_progress += step
+            progress_bar.progress(min(current_progress, 1.0))
+        
+        progress_bar.empty()
         return con, True
     except Exception as e:
-        return con, str(e)
+        return con, f"Fallo Crítico: {str(e)}"
 
-con, status = init_engine()
+con, status = load_data_lake()
 
 # --- NAVEGACIÓN LATERAL ---
 st.sidebar.title("🛡️ VORTICE-8")
-st.sidebar.write("Analista: Ing. Jairo Peso")
-menu = st.sidebar.radio("Ámbito de Análisis", [
-    "Dashboard Consolidado Z8", 
+st.sidebar.info("Analista Policial: Ing. Jairo Peso")
+menu = st.sidebar.radio("Nivel Operativo", [
+    "Consolidado Zona 8", 
     "Análisis por Distrito", 
-    "Productividad vs Delito", 
+    "Dinamismo Productividad", 
     "Patrones Cuánticos",
-    "Meteorología Operativa"
+    "Meteorología & Delito"
 ])
 
+# --- LÓGICA DE INTERFAZ ---
 if status is not True:
-    st.error(f"❌ Error de conexión al Data Lake: {status}")
-    st.info("Verifica que los links de SharePoint tengan permiso de 'Cualquier persona' y terminen en ?download=1")
+    st.error(f"❌ Error en Data Lake: {status}")
+    st.warning("Revisa que los links de SharePoint no hayan expirado.")
 else:
-    # --- 1. DASHBOARD CONSOLIDADO ---
-    if menu == "Dashboard Consolidado Z8":
-        st.title("📈 Consolidado Zona 8 (GYE-DURÁN-SAMB)")
+    # 1. CONSOLIDADO ZONA 8
+    if menu == "Consolidado Zona 8":
+        st.title("📈 Dashboard Ejecutivo - Zona 8")
         
-        # Consultas rápidas con DuckDB
-        total_eventos = con.execute("SELECT COUNT(*) FROM t_evento").fetchone()[0]
-        total_detenidos = con.execute("SELECT COUNT(*) FROM t_detenidos").fetchone()[0]
-        
+        # Consultas de alto rendimiento
         c1, c2, c3 = st.columns(3)
-        c1.metric("Total Eventos", f"{total_eventos:,}")
-        c2.metric("Detenciones", f"{total_detenidos:,}")
-        c3.metric("Estatus", "Remoto Directo")
-
-        # Gráfico Temporal
-        st.subheader("📌 Evolución Mensual de Infracciones")
-        df_time = con.execute("SELECT CAST(FECHA_EVENTO AS DATE) as fecha, COUNT(*) as cantidad FROM t_evento GROUP BY fecha ORDER BY fecha").df()
-        st.plotly_chart(px.line(df_time, x='fecha', y='cantidad', template="plotly_dark", color_discrete_sequence=['#00ffcc']), use_container_width=True)
-
-    # --- 2. ANÁLISIS POR DISTRITO ---
-    elif menu == "Análisis por Distrito":
-        distritos = ["9 DE OCTUBRE", "DURÁN", "ESTEROS", "FLORIDA", "MODELO", "NUEVA PROSPERINA", "PASCUALES", "PORTETE", "PROGRESO", "SAMBORONDÓN", "SUR", "CHONE"]
-        d_sel = st.sidebar.selectbox("Seleccione Distrito", distritos)
+        ev_count = con.execute("SELECT COUNT(*) FROM t_evento").fetchone()[0]
+        det_count = con.execute("SELECT COUNT(*) FROM t_detenidos").fetchone()[0]
+        arm_count = con.execute("SELECT SUM(CAST(CANTIDAD AS INT)) FROM t_armas").fetchone()[0] or 0
         
-        st.title(f"📍 Detalle Táctico: {d_sel}")
+        c1.metric("Total Eventos", f"{ev_count:,}")
+        c2.metric("Detenciones", f"{det_count:,}")
+        c3.metric("Armas Incautadas", int(arm_count))
+
+        # Evolución Temporal
+        st.subheader("📌 Tendencia Temporal")
+        df_time = con.execute("""
+            SELECT CAST(FECHA_EVENTO AS DATE) as fecha, COUNT(*) as n 
+            FROM t_evento GROUP BY fecha ORDER BY fecha
+        """).df()
+        st.plotly_chart(px.line(df_time, x='fecha', y='n', template="plotly_dark", color_discrete_sequence=['#00ffcc']), use_container_width=True)
+
+    # 2. ANÁLISIS POR DISTRITO
+    elif menu == "Análisis por Distrito":
+        dist_list = con.execute("SELECT DISTINCT DISTRITO FROM t_evento WHERE DISTRITO IS NOT NULL").df()
+        d_sel = st.sidebar.selectbox("Seleccione Distrito", dist_list['DISTRITO'])
+        
+        st.title(f"📍 Situación Táctica: Distrito {d_sel}")
         
         col_l, col_r = st.columns(2)
-        
         with col_l:
-            st.write("### Delitos por Modalidad")
-            # DuckDB filtra en la nube, solo baja el resultado pequeño
-            df_mod = con.execute(f"SELECT MODALIDAD, COUNT(*) as n FROM t_evento WHERE DISTRITO = '{d_sel}' GROUP BY MODALIDAD").df()
-            st.plotly_chart(px.pie(df_mod, names='MODALIDAD', values='n', hole=0.5, template="plotly_dark"), use_container_width=True)
+            st.write("### Modalidad de Infracción")
+            df_pie = con.execute(f"SELECT MODALIDAD, COUNT(*) as n FROM t_evento WHERE DISTRITO = '{d_sel}' GROUP BY MODALIDAD").df()
+            st.plotly_chart(px.pie(df_pie, names='MODALIDAD', values='n', hole=0.4, template="plotly_dark"), use_container_width=True)
             
         with col_r:
-            st.write("### Top Circuitos Críticos")
-            df_circ = con.execute(f"SELECT CIRCUITO, COUNT(*) as n FROM t_evento WHERE DISTRITO = '{d_sel}' GROUP BY CIRCUITO ORDER BY n DESC LIMIT 10").df()
-            st.plotly_chart(px.bar(df_circ, x='n', y='CIRCUITO', orientation='h', template="plotly_dark"), use_container_width=True)
+            st.write("### Circuitos Críticos")
+            df_bar = con.execute(f"SELECT CIRCUITO, COUNT(*) as n FROM t_evento WHERE DISTRITO = '{d_sel}' GROUP BY CIRCUITO ORDER BY n DESC LIMIT 10").df()
+            st.plotly_chart(px.bar(df_bar, x='n', y='CIRCUITO', orientation='h', template="plotly_dark"), use_container_width=True)
 
-    # --- 3. PRODUCTIVIDAD VS DELITO ---
-    elif menu == "Productividad vs Delito":
-        st.title("⚔️ Estrategia: Productividad Operativa")
+    # 3. DINAMISMO PRODUCTIVIDAD
+    elif menu == "Dinamismo Productividad":
+        st.title("⚔️ Estrategia Operativa")
+        st.info("Cruce de Productividad (Detenidos) vs Incidencia (Eventos)")
         
-        # Correlacionamos Eventos (Delito) con Detenidos (Productividad)
-        df_estrategia = con.execute("""
+        # JOIN Multinivel entre tablas
+        df_prod = con.execute("""
             SELECT e.DISTRITO, 
-                   COUNT(DISTINCT e.N_EVENTO) as Delitos,
-                   COUNT(DISTINCT d.NUMERO_PARTE) as Detenciones
+                   COUNT(DISTINCT e.N_EVENTO) as Eventos,
+                   COUNT(DISTINCT d.DOCUMENTO) as Detenidos
             FROM t_evento e
             LEFT JOIN t_detenidos d ON e.N_EVENTO = d.N_EVENTO
             GROUP BY e.DISTRITO
         """).df()
         
-        st.plotly_chart(px.scatter(df_estrategia, x='Delitos', y='Detenciones', text='DISTRITO', size='Detenciones', color='DISTRITO', template="plotly_dark"), use_container_width=True)
+        fig = px.scatter(df_prod, x='Eventos', y='Detenidos', text='DISTRITO', size='Detenidos', color='DISTRITO', template="plotly_dark")
+        st.plotly_chart(fig, use_container_width=True)
 
-    # --- 4. PATRONES CUÁNTICOS ---
+    # 4. PATRONES CUÁNTICOS (No percibidos)
     elif menu == "Patrones Cuánticos":
-        st.title("🧠 Módulo Cuántico: Lo No Percibido")
-        st.write("Identificación de patrones probabilísticos (Hora, Clima, Infracción).")
+        st.title("🧠 Módulo Cuántico: Análisis No Lineal")
+        st.write("Identificación de 'Hotspots' temporales y correlaciones ocultas.")
         
-        # Análisis de calor por hora y día
+        # Heatmap de densidad temporal
         df_q = con.execute("""
             SELECT strftime('%w', CAST(FECHA_EVENTO AS DATE)) as dia,
                    strftime('%H', CAST(HORA_EVENTO AS TIME)) as hora,
@@ -125,23 +147,28 @@ else:
         """).df()
         
         fig_q = px.density_heatmap(df_q, x='hora', y='dia', z='densidad', 
-                                   labels={'dia': 'Día de la Semana (0=Dom)', 'hora': 'Hora del Día'},
-                                   color_continuous_scale='Viridis', template="plotly_dark")
+                                   labels={'dia': 'Día de la Semana', 'hora': 'Hora'},
+                                   color_continuous_scale='Magma', template="plotly_dark")
         st.plotly_chart(fig_q, use_container_width=True)
+        st.markdown("> **Interpretación:** Las zonas más brillantes indican ventanas críticas de tiempo donde la probabilidad de eventos es máxima.")
 
-    # --- 5. METEOROLOGÍA ---
-    elif menu == "Meteorología Operativa":
-        st.title("☁️ Combinación Meteorológica")
+    # 5. METEOROLOGÍA
+    elif menu == "Meteorología & Delito":
+        st.title("☁️ Inteligencia Meteorológica Real-Time")
         
-        # API de clima en tiempo real para Guayaquil
+        # Conexión con API Meteorológica para Zona 8
         try:
-            w_res = requests.get("https://api.open-meteo.com/v1/forecast?latitude=-2.1962&longitude=-79.8862&current_weather=true").json()
-            temp = w_res['current_weather']['temperature']
-            viento = w_res['current_weather']['windspeed']
+            w = requests.get("https://api.open-meteo.com/v1/forecast?latitude=-2.1962&longitude=-79.8862&current_weather=true").json()
+            curr = w['current_weather']
             
-            st.metric("Temperatura Actual Zona 8", f"{temp} °C")
+            st.metric("Temperatura GYE", f"{curr['temperature']} °C")
             
-            # Lógica de predicción basada en tus datos históricos
-            st.info(f"Análisis: Bajo condiciones de {temp}°C, la base histórica muestra un incremento del 12% en delitos de oportunidad en el Distrito Modelo.")
+            # Análisis basado en tu columna de clima
+            st.subheader("Análisis Histórico de Clima")
+            df_w = con.execute("SELECT CONDICION_CLIMATICA, COUNT(*) as n FROM t_evento GROUP BY 1 ORDER BY n DESC").df()
+            st.plotly_chart(px.bar(df_w, x='CONDICION_CLIMATICA', y='n', template="plotly_dark"), use_container_width=True)
         except:
-            st.warning("No se pudo conectar con el servicio meteorológico.")
+            st.warning("Servicio meteorológico temporalmente fuera de línea.")
+
+st.sidebar.markdown("---")
+st.sidebar.caption("SISTEMA VORTICE-8 | v1.0")
