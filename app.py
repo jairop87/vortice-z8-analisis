@@ -2,11 +2,12 @@ import streamlit as st
 import duckdb
 import plotly.express as px
 import pandas as pd
-import requests
+import gc
 
 # --- 1. CONFIGURACIÓN E INTERFAZ ---
-st.set_page_config(page_title="VORTICE-8 | SIIPNE Z8", layout="wide", page_icon="👮")
+st.set_page_config(page_title="VORTICE-8 | Inteligencia Z8", layout="wide", page_icon="👮")
 
+# Estética Táctica (Dark Mode)
 st.markdown("""
     <style>
     .main { background-color: #0d1117; color: #c9d1d9; }
@@ -37,40 +38,41 @@ MAPEO_DATA = {
 }
 
 @st.cache_resource
-def init_vortice_engine():
+def init_engine():
     con = duckdb.connect(database=':memory:')
     try:
         con.execute("INSTALL httpfs; LOAD httpfs;")
         con.execute("SET http_keep_alive=false;")
+        # Creamos VISTAS perezosas (Lazy Loading) para no saturar la RAM
         for tabla, file in MAPEO_DATA.items():
             url = f"{HF_BASE}{file}"
-            # Creamos Vistas para ahorro extremo de RAM
             con.execute(f"CREATE OR REPLACE VIEW t_{tabla} AS SELECT * FROM read_parquet('{url}')")
         return con, True
     except Exception as e:
         return con, str(e)
 
-con, status = init_vortice_engine()
+con, status = init_engine()
 
 # --- 3. NAVEGACIÓN TÁCTICA ---
 st.sidebar.title("🛡️ VORTICE-8")
 menu = st.sidebar.radio("Módulos de Inteligencia", [
     "📱 Operatividad SIIPNE Móvil",
-    "🗺️ Geo-Inteligencia Z8",
+    "🗺️ Geo-Inteligencia (Mapas)",
     "💀 Análisis Crítico (Violencia)",
-    "👤 Delincuencia y Eventos",
+    "📞 Emergencias ECU911",
     "🧠 Análisis Cuántico (Cruces)"
 ])
 
 if status is not True:
-    st.error(f"🚨 Fallo en el Data Lake: {status}")
+    st.error(f"🚨 Error en el Data Lake: {status}")
 else:
-    # --- NIVEL 1: SIIPNE MÓVIL (VINCULACIÓN MAESTRA) ---
+    # --- NIVEL 1: SIIPNE MÓVIL (RELACIONAL) ---
     if menu == "📱 Operatividad SIIPNE Móvil":
         st.title("📱 Inteligencia SIIPNE Móvil - Zona 8")
-        st.info("Vínculo Maestro: ID OPERATIVO (Usuarios -> Personas/Vehículos)")
+        st.info("Estructura: Usuarios (Master) ➡️ Personas/Vehículos (Detalle) via ID OPERATIVO")
 
         c1, c2, c3 = st.columns(3)
+        # Consultas rápidas sobre vistas
         ops_t = con.execute("SELECT COUNT(*) FROM t_usuarios").fetchone()[0]
         per_t = con.execute("SELECT COUNT(*) FROM t_pers_reg").fetchone()[0]
         veh_t = con.execute("SELECT COUNT(*) FROM t_veh_reg").fetchone()[0]
@@ -79,8 +81,7 @@ else:
         c2.metric("Personas Registradas", f"{per_t:,}")
         c3.metric("Vehículos Registrados", f"{veh_t:,}")
 
-        # Análisis de Productividad por Agente
-        st.subheader("📊 Top 10 Agentes / Unidades por Registro")
+        st.subheader("📊 Productividad por Agente/Unidad")
         df_agente = con.execute("""
             SELECT "QUIEN HACE OPERATIVO" as Agente, COUNT(*) as Registros 
             FROM t_usuarios GROUP BY 1 ORDER BY 2 DESC LIMIT 10
@@ -88,10 +89,11 @@ else:
         st.plotly_chart(px.bar(df_agente, x='Registros', y='Agente', orientation='h', template="plotly_dark"), width='stretch')
 
     # --- NIVEL 2: GEO-INTELIGENCIA (MAPAS) ---
-    elif menu == "🗺️ Geo-Inteligencia Z8":
-        st.title("🗺️ Mapa de Calor Espacial (Lo No Percibido)")
+    elif menu == "🗺️ Geo-Inteligencia (Mapas)":
+        st.title("🛰️ Análisis Espacial de lo No Percibido")
+        st.write("Cruce de coordenadas: SIIPNE Móvil vs Delincuencia vs Violencia.")
         
-        # Combinamos coordenadas de múltiples fuentes para detectar solapamientos
+        # Unificamos coordenadas de diferentes fuentes para el mapa
         df_map = con.execute("""
             SELECT CAST(LATITUD AS FLOAT) as lat, CAST(LONGITUD AS FLOAT) as lon, 'Operativo SIIPNE' as tipo FROM t_usuarios
             UNION ALL
@@ -104,31 +106,27 @@ else:
                                     mapbox_style="carto-darkmatter", zoom=10, 
                                     center={"lat": -2.19, "lon": -79.88}, template="plotly_dark")
         st.plotly_chart(fig_map, width='stretch')
+        st.markdown("> **Interpretación:** Los vacíos de color 'Operativo' sobre zonas de 'Violencia' indican áreas de intervención urgente.")
 
     # --- NIVEL 3: VIOLENCIA ---
     elif menu == "💀 Análisis Crítico (Violencia)":
-        st.title("💀 Muertes Violentas y Factores Críticos")
-        col_v1, col_v2 = st.columns(2)
+        st.title("💀 Muertes Violentas Zona 8")
         
-        df_arm = con.execute("SELECT TIPO_ARMA, COUNT(*) as n FROM t_violencia GROUP BY 1 ORDER BY n DESC").df()
-        col_v1.plotly_chart(px.pie(df_arm, names='TIPO_ARMA', values='n', hole=0.5, title="Armas Utilizadas"), width='stretch')
-        
-        df_dist_v = con.execute("SELECT DISTRITO, COUNT(*) as n FROM t_violencia GROUP BY 1 ORDER BY n DESC").df()
-        col_v2.plotly_chart(px.bar(df_dist_v, x='n', y='DISTRITO', orientation='h', title="Muertes por Distrito"), width='stretch')
+        df_v = con.execute("SELECT DISTRITO, TIPO_ARMA, COUNT(*) as n FROM t_violencia GROUP BY ALL").df()
+        st.plotly_chart(px.bar(df_v, x='DISTRITO', y='n', color='TIPO_ARMA', template="plotly_dark"), width='stretch')
 
-    # --- NIVEL 4: DELINCUENCIA Y ECU911 ---
-    elif menu == "👤 Delincuencia y Eventos":
-        st.title("👤 Delincuencia Común vs ECU911")
-        
+    # --- NIVEL 4: ECU911 ---
+    elif menu == "📞 Emergencias ECU911":
+        st.title("📞 Dinámica de Auxilio (ECU911)")
         df_ecu = con.execute("SELECT \"Tipo de Incidente\" as tipo, COUNT(*) as n FROM t_ecu911 GROUP BY 1 ORDER BY n DESC").df()
         st.plotly_chart(px.treemap(df_ecu, path=['tipo'], values='n', template="plotly_dark"), width='stretch')
 
-    # --- NIVEL 5: ANÁLISIS CUÁNTICO (VINCULACIÓN TOTAL) ---
+    # --- NIVEL 5: ANÁLISIS CUÁNTICO (VINCULACIÓN) ---
     elif menu == "🧠 Análisis Cuántico (Cruces)":
-        st.title("🧠 Correlación de Productividad SIIPNE")
-        st.info("Módulo de Probabilidad: Relación entre Registros (Personas/Vehículos) y Delincuencia Real.")
+        st.title("🧠 Correlación de Productividad Preventiva")
+        st.info("Módulo de Probabilidad: ¿La revisión de Personas/Vehículos impacta en la reducción del delito?")
         
-        # Cruzamos la tabla Maestra de usuarios con el total de delitos por distrito
+        # JOIN Maestro-Detalle: Usuarios con Personas + Subconsulta de Delitos
         df_quantum = con.execute("""
             SELECT u.DISTRITO, 
                    COUNT(p.CEDULA) as Antecedentes_Revisados,
@@ -143,5 +141,5 @@ else:
                            size='Delitos_Distrito', color='Antecedentes_Revisados', template="plotly_dark")
         st.plotly_chart(fig_q, width='stretch')
 
-st.sidebar.markdown("---")
-st.sidebar.caption("ING. JAIRO PESO | VORTICE-8 v2.5")
+# Garbage collector para limpiar RAM después de cada ejecución
+gc.collect()
