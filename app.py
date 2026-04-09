@@ -22,12 +22,17 @@ st.markdown("""
 # IMPORTANTE: Reemplaza cada URL con el link individual CORRESPONDIENTE al archivo.
 # No repitas links si quieres evitar que la memoria colapse (OOM).
 DATA_LINKS = {
-    "armas": "https://analisispolicial.sharepoint.com/:u:/g/IQByBqSIWwvlRb0C7-7yXgjbAfJvhZumoAkpRbv_tNc2t0s?download=1",
-    "objetos": "https://analisispolicial.sharepoint.com/:u:/g/IQByBqSIWwvlRb0C7-7yXgjbAfJvhZumoAkpRbv_tNc2t0s?download=1",
-    "detenidos": "https://analisispolicial.sharepoint.com/:u:/g/IQByBqSIWwvlRb0C7-7yXgjbAfJvhZumoAkpRbv_tNc2t0s?download=1",
-    "evento": "https://analisispolicial.sharepoint.com/:u:/g/IQBRcL1hAqruSrohG7Ch8mkzAbPC4AtM9lzaqD5-QpOnU-8?download=1",
-    "personal": "https://analisispolicial.sharepoint.com/:u:/g/IQBRcL1hAqruSrohG7Ch8mkzAbPC4AtM9lzaqD5-QpOnU-8?download=1",
-    "vehiculos": "https://analisispolicial.sharepoint.com/:u:/g/IQBRcL1hAqruSrohG7Ch8mkzAbPC4AtM9lzaqD5-QpOnU-8?download=1"
+    "1 ARMAS PEGAR HOJA":"https://analisispolicial.sharepoint.com/:u:/g/IQByBqSIWwvlRb0C7-7yXgjbAfJvhZumoAkpRbv_tNc2t0s?e=lhDBAu?download=1"
+"10 OBJETOS":"https://analisispolicial.sharepoint.com/:u:/g/IQByBqSIWwvlRb0C7-7yXgjbAfJvhZumoAkpRbv_tNc2t0s?e=lhDBAu?download=1"
+"11 DESAPARECIDOS":"https://analisispolicial.sharepoint.com/:u:/g/IQByBqSIWwvlRb0C7-7yXgjbAfJvhZumoAkpRbv_tNc2t0s?e=lhDBAu?download=1"
+"2 DETENIDOS PEGAR HOJA":"https://analisispolicial.sharepoint.com/:u:/g/IQByBqSIWwvlRb0C7-7yXgjbAfJvhZumoAkpRbv_tNc2t0s?e=lhDBAu?download=1"
+"3 VEHICULOS PEGAR HOJA":"https://analisispolicial.sharepoint.com/:u:/g/IQByBqSIWwvlRb0C7-7yXgjbAfJvhZumoAkpRbv_tNc2t0s?e=lhDBAu?download=1"
+"4 INDICIOS PEGAR HOJA":"https://analisispolicial.sharepoint.com/:u:/g/IQBRcL1hAqruSrohG7Ch8mkzAbPC4AtM9lzaqD5-QpOnU-8?e=zEnYDA?download=1"
+"5 EVENTO PEGAR HOJA":"https://analisispolicial.sharepoint.com/:u:/g/IQBRcL1hAqruSrohG7Ch8mkzAbPC4AtM9lzaqD5-QpOnU-8?e=zEnYDA?download=1"
+"6 PERSONAL POLICIAL PEGAR HOJA":"https://analisispolicial.sharepoint.com/:u:/g/IQBRcL1hAqruSrohG7Ch8mkzAbPC4AtM9lzaqD5-QpOnU-8?e=zEnYDA?download=1"
+"personas":"https://analisispolicial.sharepoint.com/:u:/g/IQBRcL1hAqruSrohG7Ch8mkzAbPC4AtM9lzaqD5-QpOnU-8?e=zEnYDA?download=1"
+"usuarios":"https://analisispolicial.sharepoint.com/:u:/g/IQBRcL1hAqruSrohG7Ch8mkzAbPC4AtM9lzaqD5-QpOnU-8?e=zEnYDA?download=1"
+"vehiculos":"https://analisispolicial.sharepoint.com/:u:/g/IQBRcL1hAqruSrohG7Ch8mkzAbPC4AtM9lzaqD5-QpOnU-8?e=zEnYDA?download=1"
 }
 
 # --- 3. MOTOR DE INGESTA (MEMORY SAFE) ---
