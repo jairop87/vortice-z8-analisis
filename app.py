@@ -6,169 +6,151 @@ import requests
 import io
 import gc
 
-# --- 1. CONFIGURACIÓN TÉCNICA ---
-st.set_page_config(page_title="VORTICE-8 | Inteligencia Z8", layout="wide", page_icon="🚔")
+# --- CONFIGURACIÓN DE INTERFAZ ---
+st.set_page_config(page_title="VORTICE-8 | Inteligencia Integral", layout="wide", page_icon="🛡️")
 
-# Estética Antigravity (Dark Mode Operativo)
+# Estética Táctica
 st.markdown("""
     <style>
     .main { background-color: #0d1117; color: #c9d1d9; }
-    .stMetric { background-color: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 15px; }
-    [data-testid="stHeader"] { background: rgba(13,17,23,0.8); }
+    .stMetric { background-color: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 15px; }
+    div[data-testid="stMetricValue"] { color: #00ffcc; font-family: 'monospace'; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. DATA LAKE: MAPEADO DE SHAREPOINT ---
-# IMPORTANTE: Reemplaza cada URL con el link individual CORRESPONDIENTE al archivo.
-# No repitas links si quieres evitar que la memoria colapse (OOM).
-DATA_LINKS = {
-    "1 ARMAS PEGAR HOJA":"https://analisispolicial.sharepoint.com/:u:/g/IQByBqSIWwvlRb0C7-7yXgjbAfJvhZumoAkpRbv_tNc2t0s?e=lhDBAu?download=1"
-"2 DETENIDOS PEGAR HOJA":"https://analisispolicial.sharepoint.com/:u:/g/IQByBqSIWwvlRb0C7-7yXgjbAfJvhZumoAkpRbv_tNc2t0s?e=lhDBAu?download=1"
-"3 VEHICULOS PEGAR HOJA":"https://analisispolicial.sharepoint.com/:u:/g/IQByBqSIWwvlRb0C7-7yXgjbAfJvhZumoAkpRbv_tNc2t0s?e=lhDBAu?download=1"
+# --- REPOSITORIO HUGGING FACE ---
+HF_USER = "JAIRO1987"
+HF_REPO = "vortice-z8-data"
+
+# Mapeo de archivos (ADN de datos actualizado)
+ARCHIVOS = {
+    "violencia": "1%20VIOLENCIA.parquet",
+    "delincuencia": "2%20DELINCUENCIA.parquet",
+    "ecu911": "ECU911.parquet",
+    "evento": "5%20EVENTO%20PEGAR%20HOJA.parquet"
 }
 
-# --- 3. MOTOR DE INGESTA (MEMORY SAFE) ---
 @st.cache_resource
-def init_engine():
+def load_vortice_engine():
     con = duckdb.connect(database=':memory:')
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-    
-    st.toast("🛰️ Conectando con el Data Lake de SharePoint...", icon="🌐")
+    headers = {'User-Agent': 'Mozilla/5.0'}
     
     try:
-        for name, url in DATA_LINKS.items():
-            # Descarga vía Buffer para evitar HTTP 0 Error
-            resp = requests.get(url, headers=headers, timeout=60)
+        con.execute("INSTALL httpfs; LOAD httpfs;")
+        for tabla, file in ARCHIVOS.items():
+            url = f"https://huggingface.co/datasets/{HF_USER}/{HF_REPO}/resolve/main/{file}"
+            # Creamos tablas físicas para máxima velocidad en cruces
+            resp = requests.get(url, headers=headers)
             if resp.status_code == 200:
-                # Lectura optimizada con PyArrow
                 df_tmp = pd.read_parquet(io.BytesIO(resp.content))
-                
-                # Registro en DuckDB (Transforma el DataFrame en Tabla SQL física en memoria)
-                con.execute(f"CREATE OR REPLACE TABLE t_{name} AS SELECT * FROM df_tmp")
-                
-                # Liberación agresiva de RAM
+                con.register("df_tmp", df_tmp)
+                con.execute(f"CREATE OR REPLACE TABLE t_{tabla} AS SELECT * FROM df_tmp")
                 del df_tmp
                 gc.collect()
-            else:
-                return con, f"Error en {name}: SharePoint rechazó la conexión (Status {resp.status_code})"
-        
         return con, True
     except Exception as e:
-        return con, f"Fallo en Ingesta: {str(e)}"
+        return con, str(e)
 
-con, status = init_engine()
+con, status = load_vortice_engine()
 
-# --- 4. INTERFAZ Y NAVEGACIÓN ---
+# --- NAVEGACIÓN LATERAL ---
 st.sidebar.title("🛡️ VORTICE-8")
-st.sidebar.caption("Ingeniería de Sistemas | Zona 8")
-menu = st.sidebar.radio("Nivel Operativo", [
-    "📌 Consolidado Zona 8", 
-    "📍 Análisis por Distrito", 
-    "📊 Productividad Operativa", 
-    "🧠 Patrones Cuánticos",
-    "☁️ Meteorología Delictiva"
+menu = st.sidebar.radio("Módulos de Inteligencia", [
+    "📌 Visión Global Z8", 
+    "💀 Análisis de Violencia", 
+    "👤 Delincuencia Común", 
+    "📞 Eventos ECU911",
+    "🧠 Análisis Cuántico (Cruces)"
 ])
 
 if status is not True:
-    st.error(f"🚨 Error Crítico: {status}")
-    if st.button("🔄 Reintentar Conexión"):
-        st.cache_resource.clear()
-        st.rerun()
+    st.error(f"Error de Ingesta: {status}")
 else:
-    # --- NIVEL 1: CONSOLIDADO ---
-    if menu == "📌 Consolidado Zona 8":
-        st.title("📈 Dashboard Ejecutivo - Zona 8")
+    # --- 1. VISIÓN GLOBAL ---
+    if menu == "📌 Visión Global Z8":
+        st.title("📈 Dashboard Ejecutivo Zona 8")
         
-        # Consultas de alta velocidad
-        m1, m2, m3 = st.columns(3)
-        res_ev = con.execute("SELECT COUNT(*) FROM t_evento").fetchone()[0]
-        res_det = con.execute("SELECT COUNT(*) FROM t_detenidos").fetchone()[0]
+        c1, c2, c3 = st.columns(3)
+        muertes = con.execute("SELECT COUNT(*) FROM t_violencia").fetchone()[0]
+        delitos = con.execute("SELECT COUNT(*) FROM t_delincuencia").fetchone()[0]
+        llamadas = con.execute("SELECT COUNT(*) FROM t_ecu911").fetchone()[0]
         
-        m1.metric("Total Eventos", f"{res_ev:,}")
-        m2.metric("Total Detenidos", f"{res_det:,}")
-        m3.metric("Estatus Data Lake", "Sincronizado", delta="Antigravity ON")
+        c1.metric("Muertes Violentas", f"{muertes:,}", delta_color="inverse")
+        c2.metric("Delincuencia Reportada", f"{delitos:,}")
+        c3.metric("Alertas ECU911", f"{llamadas:,}")
 
-        # Gráfico de Serie Temporal
-        st.subheader("📅 Tendencia de Incidentes")
-        df_time = con.execute("""
-            SELECT CAST(FECHA_EVENTO AS DATE) as fecha, COUNT(*) as cantidad 
-            FROM t_evento GROUP BY fecha ORDER BY fecha
+        st.subheader("📊 Línea de Tiempo Unificada")
+        # SQL para unir fechas de distintas fuentes
+        df_line = con.execute("""
+            SELECT FECHA_INFRACCION as fecha, 'Violencia' as tipo FROM t_violencia
+            UNION ALL
+            SELECT FECHA_INFRACCION as fecha, 'Delincuencia' as tipo FROM t_delincuencia
+            UNION ALL
+            SELECT CAST(Fecha AS DATE) as fecha, 'ECU911' as tipo FROM t_ecu911
         """).df()
-        fig_time = px.area(df_time, x='fecha', y='cantidad', template="plotly_dark", color_discrete_sequence=['#00ffcc'])
-        st.plotly_chart(fig_time, use_container_width=True)
+        fig_line = px.histogram(df_line, x="fecha", color="tipo", barmode="group", template="plotly_dark")
+        st.plotly_chart(fig_line, width='stretch')
 
-    # --- NIVEL 2: ANÁLISIS POR DISTRITO ---
-    elif menu == "📍 Análisis por Distrito":
-        dist_list = con.execute("SELECT DISTINCT DISTRITO FROM t_evento WHERE DISTRITO IS NOT NULL").df()
-        d_sel = st.sidebar.selectbox("Seleccione el Distrito", dist_list['DISTRITO'])
-        
-        st.title(f"🔍 Detalle Táctico: {d_sel}")
-        
+    # --- 2. ANÁLISIS DE VIOLENCIA ---
+    elif menu == "💀 Análisis de Violencia":
+        st.title("💀 Análisis de Muertes Violentas")
         col_l, col_r = st.columns(2)
+        
         with col_l:
-            st.write("### Delitos por Modalidad")
-            df_mod = con.execute(f"SELECT MODALIDAD, COUNT(*) as n FROM t_evento WHERE DISTRITO = '{d_sel}' GROUP BY MODALIDAD").df()
-            st.plotly_chart(px.pie(df_mod, names='MODALIDAD', values='n', hole=0.6, template="plotly_dark"), use_container_width=True)
-        
-        with col_r:
-            st.write("### Top Circuitos con Mayor Incidencia")
-            df_circ = con.execute(f"SELECT CIRCUITO, COUNT(*) as n FROM t_evento WHERE DISTRITO = '{d_sel}' GROUP BY CIRCUITO ORDER BY n DESC LIMIT 10").df()
-            st.plotly_chart(px.bar(df_circ, x='n', y='CIRCUITO', orientation='h', template="plotly_dark", color='n'), use_container_width=True)
-
-    # --- NIVEL 3: PRODUCTIVIDAD ---
-    elif menu == "📊 Productividad Operativa":
-        st.title("⚔️ Dinamismo: Delitos vs Detenciones")
-        
-        # JOIN Multinivel (Llave: N_EVENTO)
-        df_prod = con.execute("""
-            SELECT e.DISTRITO, 
-                   COUNT(DISTINCT e.N_EVENTO) as Delitos,
-                   COUNT(DISTINCT d.DOCUMENTO) as Detenidos
-            FROM t_evento e
-            LEFT JOIN t_detenidos d ON e.N_EVENTO = d.N_EVENTO
-            GROUP BY e.DISTRITO
-        """).df()
-        
-        fig_prod = px.scatter(df_prod, x='Delitos', y='Detenidos', text='DISTRITO', size='Detenidos', 
-                             color='DISTRITO', template="plotly_dark", title="Eficiencia Operativa por Distrito")
-        st.plotly_chart(fig_prod, use_container_width=True)
-
-    # --- NIVEL 4: PATRONES CUÁNTICOS ---
-    elif menu == "🧠 Patrones Cuánticos":
-        st.title("🧠 Módulo Cuántico: Lo No Percibido")
-        st.write("Este análisis detecta concentraciones de calor basadas en la probabilidad espacio-temporal.")
-        
-        # Heatmap de Densidad (Día de semana vs Hora)
-        df_q = con.execute("""
-            SELECT strftime('%w', CAST(FECHA_EVENTO AS DATE)) as dia,
-                   strftime('%H', CAST(HORA_EVENTO AS TIME)) as hora,
-                   COUNT(*) as densidad
-            FROM t_evento
-            GROUP BY ALL
-        """).df()
-        
-        fig_q = px.density_heatmap(df_q, x='hora', y='dia', z='densidad', 
-                                   labels={'dia': 'Día (0=Dom)', 'hora': 'Hora del Día'},
-                                   color_continuous_scale='Turbo', template="plotly_dark")
-        st.plotly_chart(fig_q, use_container_width=True)
-        st.info("💡 Las zonas rojas indican ventanas de tiempo donde la guardia operativa debe ser reforzada preventivamente.")
-
-    # --- NIVEL 5: METEOROLOGÍA ---
-    elif menu == "☁️ Meteorología Delictiva":
-        st.title("🌡️ Factor Clima en la Zona 8")
-        
-        # Conexión API Clima Real-Time
-        try:
-            w_data = requests.get("https://api.open-meteo.com/v1/forecast?latitude=-2.1962&longitude=-79.8862&current_weather=true").json()
-            curr = w_data['current_weather']
-            st.metric("Temperatura Actual (GYE)", f"{curr['temperature']} °C", delta=f"Viento: {curr['windspeed']} km/h")
+            st.write("### Armas Utilizadas")
+            df_arma = con.execute("SELECT ARMA, COUNT(*) as n FROM t_violencia GROUP BY 1 ORDER BY n DESC").df()
+            st.plotly_chart(px.pie(df_arma, names='ARMA', values='n', hole=0.4, template="plotly_dark"), width='stretch')
             
-            st.subheader("📊 Relación Histórica: Condición Climática")
-            df_w = con.execute("SELECT CONDICION_CLIMATICA, COUNT(*) as n FROM t_evento GROUP BY 1 ORDER BY n DESC").df()
-            st.plotly_chart(px.bar(df_w, x='CONDICION_CLIMATICA', y='n', template="plotly_dark", color_discrete_sequence=['#ffa500']), use_container_width=True)
-        except:
-            st.warning("No se pudo obtener el clima en tiempo real. Mostrando solo datos históricos.")
+        with col_r:
+            st.write("### Tipo de Muerte por Distrito")
+            df_dist_v = con.execute("SELECT DISTRITO, TIPO_MUERTE, COUNT(*) as n FROM t_violencia GROUP BY 1, 2").df()
+            st.plotly_chart(px.bar(df_dist_v, x='DISTRITO', y='n', color='TIPO_MUERTE', template="plotly_dark"), width='stretch')
 
-# --- FOOTER ---
+    # --- 3. DELINCUENCIA COMÚN ---
+    elif menu == "👤 Delincuencia Común":
+        st.title("👤 Análisis del Delito")
+        
+        df_delito = con.execute("""
+            SELECT DELITO, COUNT(*) as n 
+            FROM t_delincuencia 
+            GROUP BY 1 ORDER BY n DESC LIMIT 15
+        """).df()
+        st.plotly_chart(px.bar(df_delito, x='n', y='DELITO', orientation='h', title="Top Delitos Reportados", template="plotly_dark"), width='stretch')
+        
+        st.write("### Modalidad y Movilidad")
+        df_mod = con.execute("SELECT MODALIDAD, MOVILIDAD_VICTIMARIO, COUNT(*) as n FROM t_delincuencia GROUP BY 1, 2 ORDER BY n DESC LIMIT 20").df()
+        st.plotly_chart(px.scatter(df_mod, x='MODALIDAD', y='MOVILIDAD_VICTIMARIO', size='n', color='n', template="plotly_dark"), width='stretch')
+
+    # --- 4. ECU911 ---
+    elif menu == "📞 Eventos ECU911":
+        st.title("📞 Análisis de Emergencias (ECU911)")
+        
+        df_ecu = con.execute("SELECT \"Tipo de Incidente\" as tipo, COUNT(*) as n FROM t_ecu911 GROUP BY 1 ORDER BY n DESC").df()
+        st.plotly_chart(px.treemap(df_ecu, path=['tipo'], values='n', title="Distribución de Alertas ECU911"), width='stretch')
+
+    # --- 5. ANÁLISIS CUÁNTICO (CRUCES) ---
+    elif menu == "🧠 Análisis Cuántico (Cruces)":
+        st.title("🧠 Patrones No Percibidos: Cruce de Datos")
+        st.info("Este módulo busca la correlación entre las llamadas al ECU911 y la delincuencia efectiva.")
+        
+        # Correlación entre llamadas de auxilio y delitos reales por distrito
+        df_correl = con.execute("""
+            SELECT e.Distrito, 
+                   COUNT(DISTINCT e."Fecha y Hora") as Alertas_ECU,
+                   (SELECT COUNT(*) FROM t_delincuencia d WHERE d.DISTRITO = e.Distrito) as Delitos_Reales
+            FROM t_ecu911 e
+            GROUP BY e.Distrito
+        """).df()
+        
+        fig_correl = px.scatter(df_correl, x='Alertas_ECU', y='Delitos_Reales', text='Distrito', 
+                                size='Delitos_Reales', color='Distrito', template="plotly_dark",
+                                title="Llamadas ECU911 vs Delitos Efectivos")
+        st.plotly_chart(fig_correl, width='stretch')
+        
+        st.markdown("""
+        > **Interpretación:** Los distritos que se alejan de la línea diagonal indican una brecha entre la percepción ciudadana (llamadas) 
+        > y la judicialización (delitos reportados).
+        """)
+
 st.sidebar.markdown("---")
-st.sidebar.caption("SISTEMA VORTICE-8 | v1.2 (Repotenciado)")
+st.sidebar.caption("VORTICE-8 | v2.0 Integral")
