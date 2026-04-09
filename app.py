@@ -23,10 +23,8 @@ st.markdown("""
 # No repitas links si quieres evitar que la memoria colapse (OOM).
 DATA_LINKS = {
     "1 ARMAS PEGAR HOJA":"https://analisispolicial.sharepoint.com/:u:/g/IQByBqSIWwvlRb0C7-7yXgjbAfJvhZumoAkpRbv_tNc2t0s?e=lhDBAu?download=1"
-"10 OBJETOS":"https://analisispolicial.sharepoint.com/:u:/g/IQByBqSIWwvlRb0C7-7yXgjbAfJvhZumoAkpRbv_tNc2t0s?e=lhDBAu?download=1"
 "2 DETENIDOS PEGAR HOJA":"https://analisispolicial.sharepoint.com/:u:/g/IQByBqSIWwvlRb0C7-7yXgjbAfJvhZumoAkpRbv_tNc2t0s?e=lhDBAu?download=1"
 "3 VEHICULOS PEGAR HOJA":"https://analisispolicial.sharepoint.com/:u:/g/IQByBqSIWwvlRb0C7-7yXgjbAfJvhZumoAkpRbv_tNc2t0s?e=lhDBAu?download=1"
-"4 INDICIOS PEGAR HOJA":"https://analisispolicial.sharepoint.com/:u:/g/IQBRcL1hAqruSrohG7Ch8mkzAbPC4AtM9lzaqD5-QpOnU-8?e=zEnYDA?download=1"
 }
 
 # --- 3. MOTOR DE INGESTA (MEMORY SAFE) ---
