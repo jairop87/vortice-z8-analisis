@@ -2,152 +2,130 @@ import streamlit as st
 import duckdb
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 import requests
 
-# --- CONFIGURACIÓN DE LA PÁGINA ---
-st.set_page_config(
-    page_title="VORTICE-8 | Inteligencia Policial",
-    page_icon="🚔",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# --- CONFIGURACIÓN DE INTERFAZ ---
+st.set_page_config(page_title="VORTICE-8 | Inteligencia Z8", layout="wide", page_icon="🚔")
 
-# --- ESTILOS PERSONALIZADOS (ANTIGRAVITY) ---
+# Estilo para modo nocturno táctico
 st.markdown("""
     <style>
-    .main { background-color: #0e1117; }
-    .stMetric { background-color: #1f2937; padding: 15px; border-radius: 10px; border: 1px solid #374151; }
+    .main { background-color: #0b0e14; color: #e0e0e0; }
+    div[data-testid="stMetricValue"] { color: #00ffcc; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- MOTOR DE DATOS (DUCKDB) ---
+# --- MOTOR DUCKDB ---
 @st.cache_resource
-def get_connection():
-    # Conexión persistente en memoria
-    return duckdb.connect(database=':memory:')
-
-con = get_connection()
-
-def cargar_datos():
+def init_engine():
+    con = duckdb.connect(database=':memory:')
+    # Registro de tablas principales basado en tus archivos
     try:
-        # Registramos todos los .parquet de la carpeta data como una sola vista
-        con.execute("CREATE OR REPLACE VIEW base_z8 AS SELECT * FROM 'data/*.parquet'")
-        return True, "OK"
+        con.execute("CREATE OR REPLACE VIEW t_eventos AS SELECT * FROM 'data/5 EVENTO PEGAR HOJA.parquet'")
+        con.execute("CREATE OR REPLACE VIEW t_detenidos AS SELECT * FROM 'data/2 DETENIDOS PEGAR HOJA.parquet'")
+        con.execute("CREATE OR REPLACE VIEW t_armas AS SELECT * FROM 'data/1 ARMAS PEGAR HOJA.parquet'")
+        con.execute("CREATE OR REPLACE VIEW t_personal AS SELECT * FROM 'data/6 PERSONAL POLICIAL PEGAR HOJA.parquet'")
+        return con, True
     except Exception as e:
-        return False, str(e)
+        return con, f"Error en ingesta: {str(e)}"
 
-success, msg = cargar_datos()
+con, status = init_engine()
 
-# --- FUNCIONES DE ANALÍTICA (EL "OJO HUMANO") ---
-def obtener_clima_gye():
-    # Estructura para API de clima (Lat/Lon Guayaquil)
-    # Nota: Aquí puedes insertar tu API Key de OpenWeatherMap
-    try:
-        url = "https://api.open-meteo.com/v1/forecast?latitude=-2.1962&longitude=-79.8862&current_weather=true"
-        response = requests.get(url).json()
-        return response['current_weather']
-    except:
-        return None
+# --- NAVEGACIÓN ---
+st.sidebar.title("🛡️ VORTICE-8")
+st.sidebar.subheader("Zona 8 - Análisis de Información")
+menu = st.sidebar.radio("Nivel Operativo", ["Consolidado Z8", "Análisis Distrital", "Productividad vs Delito", "Análisis Cuántico"])
 
-# --- NAVEGACIÓN LATERAL ---
-st.sidebar.title("🗂️ VORTICE-8")
-st.sidebar.markdown("---")
-
-menu = st.sidebar.radio(
-    "Nivel de Análisis",
-    ["Dashboard Ejecutivo Z8", "Detalle Distrital", "Módulo Cuántico", "Estrategia Climatológica"]
-)
-
-# Lista de Distritos de la Zona 8
-distritos_z8 = [
-    "9 DE OCTUBRE", "CEIBOS", "DURAN", "ESTEROS", "FLORIDA", "MODELO", "NUEVA PROSPERINA", "PASCUALES", "PORTETE", "PROGRESO", "SAMBORONDON", "SUR"
-]
-
-# --- LÓGICA DE INTERFAZ ---
-
-if not success:
-    st.error(f"⚠️ Error al conectar con los datos: {msg}")
-    st.info("Asegúrate de que la carpeta 'data' contenga archivos .parquet válidos.")
-
+if status is not True:
+    st.error(status)
+    st.info("Asegúrate de que los archivos Parquet estén en la carpeta 'data/' de tu repositorio.")
 else:
-    # --- NIVEL 1: DASHBOARD EJECUTIVO ---
-    if menu == "Dashboard Ejecutivo Z8":
-        st.title("📈 Consolidado Zona 8")
-        st.markdown("### Análisis de Productividad y Eventos Delictivos")
+    # --- NIVEL 1: CONSOLIDADO ZONA 8 ---
+    if menu == "Consolidado Z8":
+        st.title("📈 Dashboard Ejecutivo - Zona 8")
         
-        # Métricas principales usando DuckDB
-        total_eventos = con.execute("SELECT COUNT(*) FROM base_z8").fetchone()[0]
-        clima = obtener_clima_gye()
-        temp = f"{clima['temperature']}°C" if clima else "N/A"
+        # Métricas de alto nivel
+        m1, m2, m3 = st.columns(3)
+        eventos = con.execute("SELECT COUNT(*) FROM t_eventos").fetchone()[0]
+        detenidos = con.execute("SELECT COUNT(*) FROM t_detenidos").fetchone()[0]
+        armas = con.execute("SELECT SUM(CAST(CANTIDAD AS INT)) FROM t_armas").fetchone()[0] or 0
+        
+        m1.metric("Total Eventos", f"{eventos:,}")
+        m2.metric("Detenidos/Aprehendidos", f"{detenidos:,}")
+        m3.metric("Armas Incautadas", int(armas))
 
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Total Eventos Registrados", f"{total_eventos:,}")
-        with col2:
-            st.metric("Temperatura Actual (GYE)", temp)
-        with col3:
-            st.metric("Estado del Sistema", "Operativo", delta="DuckDB Active")
+        # Tendencia Temporal
+        st.subheader("📌 Evolución Temporal de Incidentes")
+        df_time = con.execute("""
+            SELECT FECHA_EVENTO, COUNT(*) as Total 
+            FROM t_eventos 
+            GROUP BY FECHA_EVENTO 
+            ORDER BY FECHA_EVENTO ASC
+        """).df()
+        fig_time = px.line(df_time, x='FECHA_EVENTO', y='Total', template="plotly_dark", color_discrete_sequence=['#00ffcc'])
+        st.plotly_chart(fig_time, use_container_width=True)
 
-        # Gráfico de barras por tipo (Asumiendo columna 'TIPO_EVENTO' o similar)
-        # DuckDB permite sacar el DF directamente
-        try:
-            resumen_tipo = con.execute("""
-                SELECT * FROM (
-                    SELECT count(*) as total, * FROM base_z8 
-                    GROUP BY ALL 
-                    ORDER BY total DESC 
-                    LIMIT 10
-                )
-            """).df()
+    # --- NIVEL 2: ANÁLISIS DISTRITAL ---
+    elif menu == "Análisis Distrital":
+        distritos = con.execute("SELECT DISTINCT DISTRITO FROM t_eventos WHERE DISTRITO IS NOT NULL").df()
+        dist_sel = st.sidebar.selectbox("Seleccione Distrito", distritos['DISTRITO'])
+        
+        st.title(f"📍 Situación Táctica: {dist_sel}")
+        
+        col_a, col_b = st.columns(2)
+        
+        with col_a:
+            st.write("### Delitos por Modalidad")
+            df_mod = con.execute(f"SELECT MODALIDAD, COUNT(*) as Cantidad FROM t_eventos WHERE DISTRITO = '{dist_sel}' GROUP BY MODALIDAD").df()
+            st.plotly_chart(px.pie(df_mod, names='MODALIDAD', values='Cantidad', hole=0.4, template="plotly_dark"), use_container_width=True)
             
-            st.write("#### Top 10 Tipos de Incidencias")
-            fig = px.bar(resumen_tipo, x=resumen_tipo.columns[1], y='total', color='total', template="plotly_dark")
-            st.plotly_chart(fig, use_container_width=True)
-        except:
-            st.warning("No se pudo generar el gráfico automático. Verifica los nombres de las columnas.")
+        with col_b:
+            st.write("### Top Circuitos con más Eventos")
+            df_circ = con.execute(f"SELECT CIRCUITO, COUNT(*) as Total FROM t_eventos WHERE DISTRITO = '{dist_sel}' GROUP BY CIRCUITO ORDER BY Total DESC LIMIT 10").df()
+            st.plotly_chart(px.bar(df_circ, x='Total', y='CIRCUITO', orientation='h', template="plotly_dark"), use_container_width=True)
 
-    # --- NIVEL 2: DETALLE DISTRITAL ---
-    elif menu == "Detalle Distrital":
-        distrito_sel = st.sidebar.selectbox("Seleccione el Distrito", distritos_z8)
-        st.title(f"📍 Análisis Distrito: {distrito_sel}")
+    # --- NIVEL 3: PRODUCTIVIDAD VS DELITO ---
+    elif menu == "Productividad vs Delito":
+        st.title("⚔️ Dinámica de Operatividad")
+        st.info("Relación entre operativos realizados y reducción de delitos.")
         
-        # Aquí es donde DuckDB brilla por su velocidad de filtrado
-        query = f"SELECT * FROM base_z8 WHERE DISTRITO = '{distrito_sel}' LIMIT 1000"
-        try:
-            df_distrito = con.execute(query).df()
-            st.write(f"Mostrando últimos registros del Distrito {distrito_sel}:")
-            st.dataframe(df_distrito, use_container_width=True)
-        except:
-            st.error("La columna 'DISTRITO' no se encuentra en el archivo Parquet.")
+        # Join entre Eventos y Detenidos por N_EVENTO
+        df_prod = con.execute("""
+            SELECT e.DISTRITO, 
+                   COUNT(DISTINCT e.N_EVENTO) as Eventos_Delictivos,
+                   COUNT(DISTINCT d.DOCUMENTO) as Detenidos
+            FROM t_eventos e
+            LEFT JOIN t_detenidos d ON e.N_EVENTO = d.N_EVENTO
+            GROUP BY e.DISTRITO
+        """).df()
+        
+        fig_prod = px.scatter(df_prod, x='Eventos_Delictivos', y='Detenidos', text='DISTRITO', 
+                             size='Detenidos', color='DISTRITO', template="plotly_dark",
+                             title="Eficiencia de Detención por Distrito")
+        st.plotly_chart(fig_prod, use_container_width=True)
 
-    # --- NIVEL 3: MÓDULO CUÁNTICO ---
-    elif menu == "Módulo Cuántico":
-        st.title("🧠 Patrones no Percibidos")
-        st.info("Detección de correlaciones probabilísticas entre variables.")
+    # --- NIVEL 4: ANÁLISIS CUÁNTICO ---
+    elif menu == "Análisis Cuántico":
+        st.title("🧠 Módulo de Patrones No Percibidos")
         
-        # Matriz de Correlación (Ojo humano no ve esto en tablas)
-        try:
-            df_full = con.execute("SELECT * FROM base_z8 LIMIT 5000").df()
-            corr = df_full.select_dtypes(include=['number']).corr()
-            
-            fig_corr = px.imshow(corr, text_auto=True, title="Mapa de Calor: Correlaciones Ocultas", template="plotly_dark")
-            st.plotly_chart(fig_corr, use_container_width=True)
-            
-            st.markdown("""
-            > **Nota técnica:** Este módulo identifica si existe una relación estadística (Pearson) entre la hora del evento, 
-            > la dotación policial y la frecuencia de delitos.
-            """)
-        except:
-            st.warning("Se requieren columnas numéricas para el análisis de correlación.")
+        # Correlación de variables no obvias
+        st.write("### Mapa de Correlación: Variables Críticas")
+        df_quantum = con.execute("""
+            SELECT 
+                CAST(strftime('%H', CAST(HORA_EVENTO AS TIME)) AS INT) as HORA_INT,
+                CASE WHEN CONDICION_CLIMATICA = 'LLUVIA' THEN 1 ELSE 0 END as ES_LLUVIA,
+                (SELECT COUNT(*) FROM t_detenidos d WHERE d.N_EVENTO = e.N_EVENTO) as NUM_DETENIDOS
+            FROM t_eventos e
+            LIMIT 5000
+        """).df()
+        
+        if not df_quantum.empty:
+            corr = df_quantum.corr()
+            st.plotly_chart(px.imshow(corr, text_auto=True, color_continuous_scale='Viridis', template="plotly_dark"), use_container_width=True)
+            st.write("> **Análisis:** Este mapa revela si factores como la lluvia o la hora del día tienen una relación directa con la efectividad de las capturas.")
+        else:
+            st.warning("Datos insuficientes para el análisis de patrones.")
 
-    # --- NIVEL 4: METEOROLOGÍA ---
-    elif menu == "Estrategia Climatológica":
-        st.title("☁️ Meteorología y Productividad")
-        st.write("Cruce de datos meteorológicos para predicción de eventos.")
-        
-        clima = obtener_clima_gye()
-        if clima:
-            st.write(f"**Condición actual:** Velocidad del viento {clima['windspeed']} km/h")
-            # Aquí se integraría la lógica: Si llueve en Nueva Prosperina -> Probabilidad de aumento en X delito
-            st.info("Estrategia sugerida: El modelo sugiere reforzar patrullaje en zonas de baja visibilidad por condiciones climáticas actuales.")
+# Footer técnico
+st.sidebar.markdown("---")
+st.sidebar.caption("Ingeniería de Sistemas - VORTICE-8")
